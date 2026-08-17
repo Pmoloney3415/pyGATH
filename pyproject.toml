@@ -45,7 +45,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 addopts = "--strict-markers"
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 testpaths = ["tests"]
 markers = [
     "regression: end-to-end tests that run complete configured workflows",
