@@ -40,9 +40,7 @@ def test_two_dimensional_paper_field_reconstruction_in_both_coordinates(
     capped_sheet = reconstruction["capped_sheet_magnitude_v_m"]
     tolerance = 1.0e-12 * np.max(uncapped_sheet[valid_sheet])
     assert np.all(uncapped_sheet[valid_sheet] + tolerance >= capped_sheet[valid_sheet])
-    assert np.max(fields[..., RAY_SHEET_LAYOUT.uncapped_amplitude]) > np.max(
-        fields[..., RAY_SHEET_LAYOUT.capped_amplitude]
-    )
+    assert np.any(capped_sheet[valid_sheet] < uncapped_sheet[valid_sheet] - tolerance)
     np.testing.assert_allclose(
         fields[..., RAY_STATE_LAYOUT.position][..., 2], 0.0, atol=1.0e-15
     )
