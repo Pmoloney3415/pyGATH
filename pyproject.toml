@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyGATH"
+version = "0.1.0"
+description = "GPU-accelerated ray tracing for high-power laser systems"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Philip W. Moloney" },
+]
+keywords = [
+    "inertial confinement fusion",
+    "JAX",
+    "ray tracing",
+]
+dependencies = [
+    "diffrax>=0.7",
+    "jax>=0.5",
+    "matplotlib>=3.9",
+    "numpy>=2",
+]
+
+[project.urls]
+Homepage = "https://github.com/Pmoloney3415/pyGATH"
+Repository = "https://github.com/Pmoloney3415/pyGATH"
+Issues = "https://github.com/Pmoloney3415/pyGATH/issues"
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6",
+    "jupyterlab>=4",
+    "nbstripout>=0.8",
+    "pre-commit>=4",
+    "pytest>=8",
+    "ruff>=0.12",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers"
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = [
+    "regression: end-to-end tests that run complete configured workflows",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+extend-select = ["I"]
+ignore = ["N999"]

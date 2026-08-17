@@ -1,0 +1,78 @@
+# Cylindrical r-phi representation of the ten-beam S=1/64 no-CBET case.
+
+[beams]
+file = "../../beam_csvs/example_beam_csvs/paper_s64_ten_beams.csv"
+nrays_axis1 = 24
+nrays_axis2 = 1
+intensity_cutoff = 2e-4
+neighbour_spacing_m = 1e-9
+launch_padding = 2.0
+
+[beams.power]
+mode = "peak_intensity"
+
+[physics.inverse_bremsstrahlung]
+enabled = true
+# Table II: nu_ei,c = 206.45 ps^-1.
+critical_collision_frequency_hz = 2.0645e14
+
+[raytracing]
+nsamples_per_sheet = 160
+diagnostic_samples = 512
+maximum_path_length_grid_lengths = 5.0
+rtol = 1e-4
+atol = 1e-6
+max_steps = 8192
+area_floor = 1e-12
+minimum_amplitude_cap = 1.1
+
+[grid]
+geometry = "cylindrical"
+dimensions = 2
+inactive_axis_lengths_m = [1.0]
+
+[[grid.composition.elements]]
+name = "effective_ion"
+A = 5.6609
+Z = 3.1
+fraction = 1.0
+
+[grid.axes.r]
+min = 0.0
+max = 2.0e-5
+spacing = "uniform"
+ncells = 80
+
+[grid.axes.phi]
+min = -1.0
+max = 1.0
+spacing = "uniform"
+ncells = 160
+
+[grid.initial_condition]
+name = "omega_lilac_azimuthal_2d"
+
+[grid.initial_condition.parameters]
+omega_rad_s = 5.366528681791604e15
+scale = 0.015625
+density_at_scale_over_ncritical = 1.165
+density_power = 3.78
+maximum_density_over_ncritical = 4.0
+electron_temperature_ev = 70.0
+ion_temperature_over_electron = 0.5
+ion_charge = 3.1
+ion_mass_over_electron_mass = 10319.2
+mach_offset = 1.41
+mach_log_coefficient = 1.37
+
+[grid.safe_state]
+ne = 0.0
+Te = 70.0
+Ti = 35.0
+grad_ne = [0.0, 0.0, 0.0]
+velocity = [0.0, 0.0, 0.0]
+
+[deposition]
+max_subdivision_levels = 4
+relative_tolerance = 1e-4
+simplex_batch_size = 4096

@@ -1,0 +1,60 @@
+# Reproduce the ray-based field-limiter side of Fig. 1 in Follett et al.,
+# Physics of Plasmas 29, 113902 (2022). The 351 nm beam is normally incident
+# on the S=1/16 LILAC power-law density profile and reflects at ne/ncrit = 1.
+
+[beams]
+file = "../../beam_csvs/example_beam_csvs/one_dimensional_field_reconstruction.csv"
+neighbour_spacing_m = 1e-9
+launch_padding = 2.0
+
+[beams.power]
+mode = "peak_intensity"
+
+[physics.inverse_bremsstrahlung]
+enabled = false
+
+[raytracing]
+nsamples_per_sheet = 1200
+diagnostic_samples = 4096
+maximum_path_length_grid_lengths = 4.0
+rtol = 1e-7
+atol = 1e-9
+max_steps = 4096
+area_floor = 1e-12
+minimum_amplitude_cap = 1.1
+
+[grid]
+geometry = "cartesian"
+dimensions = 1
+inactive_axis_lengths_m = [1.0, 1.0]
+
+[[grid.composition.elements]]
+name = "hydrogen"
+A = 1.0
+Z = 1.0
+fraction = 1.0
+
+[grid.axes.x]
+min = -1.6e-5
+max = 1.6e-5
+spacing = "uniform"
+ncells = 2880
+
+[grid.initial_condition]
+name = "omega_lilac_reflection_1d"
+
+[grid.initial_condition.parameters]
+omega_rad_s = 5.366528681791604e15
+scale = 0.0625
+coordinate_offset_m = 3.642e-5
+density_at_scale_over_ncritical = 1.165
+density_power = 3.78
+electron_temperature_ev = 1.0
+ion_temperature_ev = 1.0
+
+[grid.safe_state]
+ne = 0.0
+Te = 1.0
+Ti = 1.0
+grad_ne = [0.0, 0.0, 0.0]
+velocity = [0.0, 0.0, 0.0]

@@ -1,0 +1,3 @@
+beam_id,origin_geometry,origin_1,origin_2,origin_3,target_geometry,target_1,target_2,target_3,width_x_m,width_y_m,rotation_pi,supergaussian_index,omega_rad_s,power_fraction
+beam_x,cartesian,-0.03,0.0,0.0,cartesian,0.0,0.0,0.0,0.001,0.00075,0.0,2.0,5.361e15,1.0
+beam_y,cartesian,0.0,-0.03,0.0,cartesian,0.0,0.0,0.0,0.0008,0.0008,0.25,2.0,5.361e15,0.5

@@ -1,0 +1,11 @@
+beam_id,origin_geometry,origin_1,origin_2,origin_3,target_geometry,target_1,target_2,target_3,width_x_m,width_y_m,rotation_pi,supergaussian_index,omega_rad_s,peak_intensity_w_m2
+paper_s64_00,cylindrical,3.0e-5,-0.8,0.0,cartesian,0.0,0.0,0.0,6.043942984636073e-6,1.0,0.0,4.0,5.366528681791604e15,1.625e18
+paper_s64_01,cylindrical,3.0e-5,-0.6,0.0,cartesian,0.0,0.0,0.0,6.043942984636073e-6,1.0,0.0,4.0,5.366528681791604e15,1.625e18
+paper_s64_02,cylindrical,3.0e-5,-0.4,0.0,cartesian,0.0,0.0,0.0,6.043942984636073e-6,1.0,0.0,4.0,5.366528681791604e15,1.625e18
+paper_s64_03,cylindrical,3.0e-5,-0.2,0.0,cartesian,0.0,0.0,0.0,6.043942984636073e-6,1.0,0.0,4.0,5.366528681791604e15,1.625e18
+paper_s64_04,cylindrical,3.0e-5,0.0,0.0,cartesian,0.0,0.0,0.0,6.043942984636073e-6,1.0,0.0,4.0,5.366528681791604e15,1.625e18
+paper_s64_05,cylindrical,3.0e-5,0.2,0.0,cartesian,0.0,0.0,0.0,6.043942984636073e-6,1.0,0.0,4.0,5.366528681791604e15,1.625e18
+paper_s64_06,cylindrical,3.0e-5,0.4,0.0,cartesian,0.0,0.0,0.0,6.043942984636073e-6,1.0,0.0,4.0,5.366528681791604e15,1.625e18
+paper_s64_07,cylindrical,3.0e-5,0.6,0.0,cartesian,0.0,0.0,0.0,6.043942984636073e-6,1.0,0.0,4.0,5.366528681791604e15,1.625e18
+paper_s64_08,cylindrical,3.0e-5,0.8,0.0,cartesian,0.0,0.0,0.0,6.043942984636073e-6,1.0,0.0,4.0,5.366528681791604e15,1.625e18
+paper_s64_09,cylindrical,3.0e-5,1.0,0.0,cartesian,0.0,0.0,0.0,6.043942984636073e-6,1.0,0.0,4.0,5.366528681791604e15,1.625e18

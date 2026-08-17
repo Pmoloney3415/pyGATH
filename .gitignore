@@ -1,0 +1,49 @@
+# Python bytecode and compiled extensions
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+
+# Virtual environments
+.venv*/
+venv/
+env/
+
+# Tool caches and test reports
+.cache/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+junit.xml
+
+# Builds and installed-package metadata
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+
+# Generated example and test data
+.temp_examples/
+.test-tmp-*/
+.ipynb_checkpoints/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*~

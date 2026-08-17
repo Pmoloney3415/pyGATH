@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAX_PLATFORMS: cpu
+  MPLBACKEND: Agg
+  PYTHONUTF8: "1"
+
+jobs:
+  quality:
+    name: Quality checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.10.11"
+          enable-cache: true
+      - name: Install Python
+        run: uv python install 3.13
+      - name: Install development environment
+        run: uv sync --frozen --all-groups --python 3.13
+      - name: Run pre-commit
+        run: uv run --frozen pre-commit run --all-files
+
+  unit-tests:
+    name: Unit tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.10.11"
+          enable-cache: true
+      - name: Install Python
+        run: uv python install ${{ matrix.python-version }}
+      - name: Install development environment
+        run: uv sync --frozen --all-groups --python ${{ matrix.python-version }}
+      - name: Run unit tests
+        run: uv run --frozen pytest tests/unit
+
+  regression-tests:
+    name: Regression tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.10.11"
+          enable-cache: true
+      - name: Install Python
+        run: uv python install 3.13
+      - name: Install development environment
+        run: uv sync --frozen --all-groups --python 3.13
+      - name: Run end-to-end regression tests
+        run: uv run --frozen pytest tests/regression
+
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.10.11"
+          enable-cache: true
+      - name: Install Python
+        run: uv python install 3.13
+      - name: Build wheel and source distribution
+        run: uv build

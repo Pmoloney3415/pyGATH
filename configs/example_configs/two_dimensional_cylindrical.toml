@@ -1,0 +1,28 @@
+[beams]
+file = "../../beam_csvs/example_beam_csvs/reduced_dimension_beam.csv"
+nrays_axis1 = 8
+nrays_axis2 = 1
+
+[beams.power]
+mode = "total_power"
+total_power_w = 1.0
+
+[grid]
+geometry = "cylindrical"
+dimensions = 2
+inactive_axis_lengths_m = [1.0]
+
+[grid.axes.r]
+min = 0.0
+max = 1.0
+spacing = "uniform"
+ncells = 32
+
+[grid.axes.phi]
+min = -1.0
+max = 1.0
+spacing = "uniform"
+ncells = 64
+
+[grid.initial_condition]
+name = "uniform"

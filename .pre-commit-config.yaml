@@ -1,0 +1,43 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: trailing-whitespace
+
+  - repo: local
+    hooks:
+      - id: strip-notebook-output
+        name: Strip notebook outputs
+        entry: uv run --frozen nbstripout
+        language: system
+        files: \.ipynb$
+        args: [--unix-newlines]
+
+      - id: ruff-format-check
+        name: Check Python formatting with Ruff
+        entry: uv run --frozen ruff format --check src tests examples
+        language: system
+        files: ^(src|tests|examples)/.*\.(py|ipynb)$
+        pass_filenames: false
+
+      - id: ruff-lint
+        name: Lint Python with Ruff
+        entry: uv run --frozen ruff check src tests examples
+        language: system
+        files: ^(src|tests|examples)/.*\.(py|ipynb)$
+        pass_filenames: false
+
+      - id: uv-lock-check
+        name: Check uv lockfile
+        entry: uv lock --check
+        language: system
+        files: ^(pyproject\.toml|uv\.lock)$
+        pass_filenames: false

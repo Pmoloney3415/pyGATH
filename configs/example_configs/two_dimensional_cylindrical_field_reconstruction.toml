@@ -1,0 +1,67 @@
+# Cylindrical r-phi representation of the same S=1/64 reflected-beam
+# field-only test as two_dimensional_cartesian_field_reconstruction.toml.
+
+[beams]
+file = "../../beam_csvs/example_beam_csvs/two_dimensional_field_reconstruction.csv"
+nrays_axis1 = 64
+nrays_axis2 = 1
+neighbour_spacing_m = 1e-9
+launch_padding = 2.0
+
+[beams.power]
+mode = "peak_intensity"
+
+[physics.inverse_bremsstrahlung]
+enabled = false
+
+[raytracing]
+nsamples_per_sheet = 400
+diagnostic_samples = 2048
+maximum_path_length_grid_lengths = 4.0
+rtol = 1e-5
+atol = 1e-7
+max_steps = 8192
+area_floor = 1e-12
+minimum_amplitude_cap = 1.1
+
+[grid]
+geometry = "cylindrical"
+dimensions = 2
+inactive_axis_lengths_m = [1.0]
+
+[[grid.composition.elements]]
+name = "hydrogen"
+A = 1.0
+Z = 1.0
+fraction = 1.0
+
+[grid.axes.r]
+min = 0.0
+max = 1.6e-5
+spacing = "uniform"
+ncells = 128
+
+[grid.axes.phi]
+min = -1.0
+max = 1.0
+spacing = "uniform"
+ncells = 256
+
+[grid.initial_condition]
+name = "omega_lilac_reflection_2d"
+
+[grid.initial_condition.parameters]
+omega_rad_s = 5.366528681791604e15
+scale = 0.015625
+density_at_scale_over_ncritical = 1.165
+density_power = 3.78
+maximum_density_over_ncritical = 4.0
+electron_temperature_ev = 1.0
+ion_temperature_ev = 1.0
+
+[grid.safe_state]
+ne = 0.0
+Te = 1.0
+Ti = 1.0
+grad_ne = [0.0, 0.0, 0.0]
+velocity = [0.0, 0.0, 0.0]

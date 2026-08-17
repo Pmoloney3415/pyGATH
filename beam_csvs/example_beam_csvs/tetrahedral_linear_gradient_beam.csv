@@ -1,0 +1,2 @@
+beam_id,origin_geometry,origin_1,origin_2,origin_3,target_geometry,target_1,target_2,target_3,width_x_m,width_y_m,rotation_pi,supergaussian_index,omega_rad_s,power_fraction
+tetrahedral_linear_gradient_20deg,cartesian,-0.001,-0.0003639702342662023,0.0,cartesian,0.0,0.0,0.0,3.2198642882676e-5,3.42650800596335e-5,0.0,2.0,5.361e15,1.0
