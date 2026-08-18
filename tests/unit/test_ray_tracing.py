@@ -14,6 +14,7 @@ from pyGATH.raytracing import (
     inverse_bremsstrahlung_depth_derivative,
     ray_rhs,
     trace_rays,
+    tracing,
 )
 
 OMEGA = 5.361e15
@@ -95,6 +96,45 @@ def test_ray_rhs_evolves_each_neighbour_with_its_own_density_gradient():
     )
 
 
+def test_primary_exit_rhs_matches_primary_components_of_tangent_rhs():
+    grid = _vacuum_grid()
+    state = _single_vacuum_ray_state()
+    characteristic_length = tracing._grid_characteristic_length(grid)
+    relative_state = tracing._absolute_to_relative_state(state)
+    scaling = tracing._build_state_scaling(relative_state, characteristic_length)
+    solver_state = tracing._to_solver_state(relative_state, scaling)
+    primary_state = tracing._to_primary_solver_state(solver_state)
+    primary_args = tracing._PrimaryTraceArguments(
+        grid=grid,
+        position_scale=scaling.scales[..., RAY_STATE_LAYOUT.position],
+        position_reference=scaling.position_reference,
+        momentum_scale=scaling.scales[..., RAY_STATE_LAYOUT.momentum],
+        frequency=state[..., RAY_STATE_LAYOUT.frequency],
+    )
+    tangent_args = tracing._TraceArguments(
+        grid=grid,
+        initial_area=tracing.initial_ray_area(state),
+        area_floor=jnp.asarray(1.0e-12),
+        scaling=scaling,
+        inverse_bremsstrahlung=InverseBremsstrahlungOptions(),
+    )
+
+    primary_derivative = jax.jit(tracing._scaled_primary_ray_rhs)(
+        0.0, primary_state, primary_args
+    )
+    tangent_derivative = jax.jit(tracing._scaled_tangent_ray_rhs)(
+        0.0, solver_state, tangent_args
+    )
+
+    assert primary_state.shape[-1] == 6
+    np.testing.assert_allclose(
+        primary_derivative,
+        tracing._to_primary_solver_state(tangent_derivative),
+        rtol=1.0e-14,
+        atol=1.0e-14,
+    )
+
+
 def test_vacuum_trace_terminates_outside_and_builds_degenerate_second_sheet():
     options = RayTracingOptions(
         nsamples_per_sheet=5,
@@ -124,6 +164,7 @@ def test_vacuum_trace_terminates_outside_and_builds_degenerate_second_sheet():
     assert not bool(result.has_caustic[0, 0, 0])
     assert np.isinf(result.caustic_path[0, 0, 0])
     assert result.terminal_path > 2.0
+    np.testing.assert_allclose(result.terminal_path, 2.0, rtol=1.0e-10)
 
     first_sheet = fields[0, 0, 0, 0]
     second_sheet = fields[0, 1, 0, 0]

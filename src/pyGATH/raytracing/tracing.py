@@ -8,8 +8,9 @@ from typing import Any
 import diffrax
 import jax
 import jax.numpy as jnp
+import optimistix as optx
 
-from pyGATH.grid import Grid
+from pyGATH.grid import Geometry, Grid, convert_positions
 
 from .plasma import (
     SPEED_OF_LIGHT,
@@ -114,6 +115,29 @@ class _StateScaling:
 
     def tree_flatten(self):
         return (self.scales, self.position_reference), None
+
+    @classmethod
+    def tree_unflatten(cls, _auxiliary, children):
+        return cls(*children)
+
+
+@jax.tree_util.register_pytree_node_class
+@dataclass(frozen=True)
+class _PrimaryTraceArguments:
+    grid: Grid
+    position_scale: Any
+    position_reference: Any
+    momentum_scale: Any
+    frequency: Any
+
+    def tree_flatten(self):
+        return (
+            self.grid,
+            self.position_scale,
+            self.position_reference,
+            self.momentum_scale,
+            self.frequency,
+        ), None
 
     @classmethod
     def tree_unflatten(cls, _auxiliary, children):
@@ -281,6 +305,22 @@ def _to_solver_state(relative_state, scaling):
 def _from_solver_state(solver_state, scaling):
     relative = solver_state * scaling.scales
     return relative.at[..., RAY_STATE_LAYOUT.position].add(scaling.position_reference)
+
+
+def _to_primary_solver_state(solver_state):
+    return jnp.concatenate(
+        (
+            solver_state[..., RAY_STATE_LAYOUT.position],
+            solver_state[..., RAY_STATE_LAYOUT.momentum],
+        ),
+        axis=-1,
+    )
+
+
+def _from_primary_solver_state(primary_state, args):
+    position = primary_state[..., :3] * args.position_scale + args.position_reference
+    momentum = primary_state[..., 3:] * args.momentum_scale
+    return position, momentum
 
 
 def _maximum_norm(value):
@@ -460,6 +500,21 @@ def _scaled_tangent_ray_rhs(_path, solver_state, args):
     return derivative / args.scaling.scales
 
 
+def _scaled_primary_ray_rhs(_path, primary_state, args):
+    """Evolve only the scaled primary position and momentum used for exit."""
+    position, momentum = _from_primary_solver_state(primary_state, args)
+    hydro = args.grid.interpolate(position)
+    ncritical = critical_density(args.frequency)
+    acceleration = -hydro.grad_ne / (2.0 * ncritical[..., None])
+    return jnp.concatenate(
+        (
+            momentum / args.position_scale,
+            acceleration / args.momentum_scale,
+        ),
+        axis=-1,
+    )
+
+
 def _projected_area_from_neighbours(state, neighbours):
     edge_one = neighbours[..., 1, :] - neighbours[..., 0, :]
     edge_two = neighbours[..., 2, :] - neighbours[..., 0, :]
@@ -520,9 +575,25 @@ def _save_diagnostics(_path, state, args):
     return _instantaneous_diagnostics(state, args)
 
 
-def _all_primary_rays_outside(_path, state, args, **_kwargs):
-    relative_state = _from_solver_state(state, args.scaling)
-    return jnp.all(~args.grid.contains(relative_state[..., RAY_STATE_LAYOUT.position]))
+def _all_primary_rays_outside(t, y, args, **_kwargs):
+    del t
+    position, _momentum = _from_primary_solver_state(y, args)
+    grid = args.grid
+    grid_position = convert_positions(position, Geometry.CARTESIAN, grid.geom)
+    active_position = grid_position[..., : grid.dimensions]
+    active_extents = grid.extents[: grid.dimensions]
+    coordinate_scale = jnp.maximum(1.0, jnp.max(jnp.abs(active_extents), axis=1))
+    coordinate_tolerance = 512.0 * jnp.finfo(position.dtype).eps * coordinate_scale
+    lower_margin = (
+        active_position - active_extents[:, 0] + coordinate_tolerance
+    ) / coordinate_scale
+    upper_margin = (
+        active_extents[:, 1] + coordinate_tolerance - active_position
+    ) / coordinate_scale
+    ray_margin = jnp.min(
+        jnp.concatenate((lower_margin, upper_margin), axis=-1), axis=-1
+    )
+    return jnp.max(ray_margin)
 
 
 def _amplitude_limit_history(
@@ -803,6 +874,14 @@ def trace_rays(
         )
     scaling = _build_state_scaling(relative_state, characteristic_length)
     solver_state = _to_solver_state(relative_state, scaling)
+    primary_solver_state = _to_primary_solver_state(solver_state)
+    primary_args = _PrimaryTraceArguments(
+        grid=grid,
+        position_scale=scaling.scales[..., RAY_STATE_LAYOUT.position],
+        position_reference=scaling.position_reference,
+        momentum_scale=scaling.scales[..., RAY_STATE_LAYOUT.momentum],
+        frequency=state[..., RAY_STATE_LAYOUT.frequency],
+    )
     args = _TraceArguments(
         grid=grid,
         initial_area=initial_area,
@@ -815,17 +894,26 @@ def trace_rays(
         atol=options.atol,
         norm=_maximum_norm,
     )
+    root_relative_tolerance = 512.0 * jnp.finfo(state.dtype).eps
+    exit_root_finder = optx.Bisection(
+        rtol=root_relative_tolerance,
+        atol=root_relative_tolerance * characteristic_length,
+    )
     exit_solution = diffrax.diffeqsolve(
-        diffrax.ODETerm(_scaled_tangent_ray_rhs),
+        diffrax.ODETerm(_scaled_primary_ray_rhs),
         diffrax.Tsit5(),
         t0=0.0,
         t1=maximum_path,
         dt0=dt0,
-        y0=solver_state,
-        args=args,
+        y0=primary_solver_state,
+        args=primary_args,
         saveat=diffrax.SaveAt(t1=True),
         stepsize_controller=controller,
-        event=diffrax.Event(_all_primary_rays_outside),
+        event=diffrax.Event(
+            _all_primary_rays_outside,
+            root_finder=exit_root_finder,
+            direction=False,
+        ),
         max_steps=options.max_steps,
         throw=False,
     )

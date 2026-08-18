@@ -1684,6 +1684,7 @@ dependencies = [
     { name = "matplotlib" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "optimistix" },
 ]
 
 [package.dev-dependencies]
@@ -1702,6 +1703,7 @@ requires-dist = [
     { name = "jax", specifier = ">=0.5" },
     { name = "matplotlib", specifier = ">=3.9" },
     { name = "numpy", specifier = ">=2" },
+    { name = "optimistix", specifier = ">=0.1" },
 ]
 
 [package.metadata.requires-dev]
