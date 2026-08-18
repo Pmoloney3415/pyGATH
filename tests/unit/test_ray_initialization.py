@@ -191,3 +191,36 @@ def test_entry_distance_for_all_grid_geometries(geom, extents, origin, expected)
     grid = Grid.create(geom=geom, extents=extents, ncells=(2, 4, 2))
     distance = ray_grid_entry_distance(grid, np.asarray(origin), np.asarray((1, 0, 0)))
     np.testing.assert_allclose(distance, expected)
+
+
+@pytest.mark.parametrize(
+    ("geom", "extents"),
+    [
+        ("cartesian", ((-1, 1), (-1, 1), (-1, 1))),
+        ("cylindrical", ((0, 1), (-np.pi, np.pi), (-1, 1))),
+        ("spherical", ((0, 1), (-np.pi, np.pi), (0, np.pi))),
+    ],
+)
+def test_entry_distance_vectorizes_and_preserves_leading_shape(geom, extents):
+    grid = Grid.create(geom=geom, extents=extents, ncells=(2, 4, 2))
+    origins = np.asarray(
+        (((-2.0, 0.0, 0.0), (2.0, 0.0, 0.0)), ((0.0, 0.0, 0.0), (-2.0, 2.0, 0.0)))
+    )
+    distances = ray_grid_entry_distance(grid, origins, np.asarray((2.0, 0.0, 0.0)))
+    assert distances.shape == (2, 2)
+    np.testing.assert_allclose(
+        distances,
+        np.asarray(((1.0, np.inf), (0.0, np.inf))),
+    )
+
+
+def test_entry_distance_can_select_signed_infinite_line_intersection():
+    grid = _cartesian_grid()
+    origins = np.asarray(((2.0, 0.0, 0.0), (-2.0, 0.0, 0.0)))
+    distances = ray_grid_entry_distance(
+        grid,
+        origins,
+        np.asarray((1.0, 0.0, 0.0)),
+        forward_only=False,
+    )
+    np.testing.assert_allclose(distances, (-3.0, 1.0))

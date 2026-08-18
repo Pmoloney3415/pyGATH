@@ -7,19 +7,25 @@ import numpy as np
 from pyGATH.grid import Geometry, Grid
 
 
-def grid_characteristic_length(grid: Grid) -> float:
-    """Return a conservative physical length scale for launch-plane padding."""
-    extents = np.asarray(grid.extents, dtype=np.float64)
-    if grid.geom is Geometry.CARTESIAN:
-        active = extents[np.asarray(grid.active_axes)]
+def _characteristic_length(
+    geometry: Geometry, dimensions: int, extents: np.ndarray
+) -> float:
+    if geometry is Geometry.CARTESIAN:
+        active = extents[:dimensions]
         return float(np.linalg.norm(active[:, 1] - active[:, 0]))
-    if grid.geom is Geometry.CYLINDRICAL:
+    if geometry is Geometry.CYLINDRICAL:
         diameter = 2.0 * extents[0, 1]
-        if grid.dimensions == 2:
+        if dimensions == 2:
             return float(diameter)
         axial_length = extents[2, 1] - extents[2, 0]
         return float(np.hypot(diameter, axial_length))
     return float(2.0 * extents[0, 1])
+
+
+def grid_characteristic_length(grid: Grid) -> float:
+    """Return a conservative physical length scale for launch-plane padding."""
+    extents = np.asarray(grid.extents, dtype=np.float64)
+    return _characteristic_length(grid.geom, grid.dimensions, extents)
 
 
 def _cartesian_to_grid(points: np.ndarray, geometry: Geometry) -> np.ndarray:
@@ -40,123 +46,117 @@ def _cartesian_to_grid(points: np.ndarray, geometry: Geometry) -> np.ndarray:
     return np.stack((radius, phi, theta), axis=-1)
 
 
-def _inside(grid: Grid, point: np.ndarray) -> bool:
-    coordinates = _cartesian_to_grid(point[None, :], grid.geom)[0]
-    extents = np.asarray(grid.extents, dtype=np.float64)
-    active = np.asarray(grid.active_axes)
-    coordinates = coordinates[active]
-    extents = extents[active]
-    scales = np.maximum(1.0, np.max(np.abs(extents), axis=1))
-    tolerance = 512.0 * np.finfo(np.float64).eps * scales
-    return bool(
-        np.all(coordinates >= extents[:, 0] - tolerance)
-        and np.all(coordinates <= extents[:, 1] + tolerance)
+def _inside(
+    points: np.ndarray,
+    geometry: Geometry,
+    dimensions: int,
+    extents: np.ndarray,
+    tolerances: np.ndarray,
+) -> np.ndarray:
+    coordinates = _cartesian_to_grid(points, geometry)[..., :dimensions]
+    active_extents = extents[:dimensions]
+    return np.all(
+        (coordinates >= active_extents[:, 0] - tolerances)
+        & (coordinates <= active_extents[:, 1] + tolerances),
+        axis=-1,
     )
 
 
-def _plane_candidate(
-    candidates: list[float],
-    origin: np.ndarray,
-    direction: np.ndarray,
+def _plane_candidates(
+    origins: np.ndarray,
+    directions: np.ndarray,
     normal: np.ndarray,
     offset: float,
-) -> None:
-    denominator = float(np.dot(normal, direction))
-    tolerance = 64.0 * np.finfo(np.float64).eps
-    if abs(denominator) > tolerance:
-        candidates.append(float((offset - np.dot(normal, origin)) / denominator))
+) -> np.ndarray:
+    denominator = directions @ normal
+    numerator = offset - origins @ normal
+    candidates = np.full(origins.shape[0], np.inf, dtype=np.float64)
+    valid = np.abs(denominator) > 64.0 * np.finfo(np.float64).eps
+    np.divide(numerator, denominator, out=candidates, where=valid)
+    return candidates[:, None]
 
 
-def _quadratic_candidates(
-    candidates: list[float],
-    a: float,
-    b: float,
-    c: float,
-) -> None:
-    scale = max(abs(a), abs(b), abs(c), 1.0)
+def _quadratic_candidates(a, b, c) -> np.ndarray:
+    a, b, c = np.broadcast_arrays(a, b, c)
+    scale = np.maximum.reduce((np.abs(a), np.abs(b), np.abs(c), np.ones_like(a)))
     tolerance = 128.0 * np.finfo(np.float64).eps * scale
-    if abs(a) <= tolerance:
-        if abs(b) > tolerance:
-            candidates.append(float(-c / b))
-        return
+    linear = (np.abs(a) <= tolerance) & (np.abs(b) > tolerance)
     discriminant = b * b - 4.0 * a * c
-    if discriminant < -tolerance:
-        return
-    root = np.sqrt(max(discriminant, 0.0))
-    candidates.extend((float((-b - root) / (2.0 * a)), float((-b + root) / (2.0 * a))))
+    quadratic = (np.abs(a) > tolerance) & (discriminant >= -tolerance)
+
+    candidates = np.full((*a.shape, 2), np.inf, dtype=np.float64)
+    np.divide(-c, b, out=candidates[..., 0], where=linear)
+    root = np.sqrt(np.maximum(discriminant, 0.0))
+    denominator = 2.0 * a
+    first_root = np.full(a.shape, np.inf, dtype=np.float64)
+    second_root = np.full(a.shape, np.inf, dtype=np.float64)
+    np.divide(-b - root, denominator, out=first_root, where=quadratic)
+    np.divide(-b + root, denominator, out=second_root, where=quadratic)
+    candidates[..., 0] = np.where(quadratic, first_root, candidates[..., 0])
+    candidates[..., 1] = np.where(quadratic, second_root, candidates[..., 1])
+    return candidates
 
 
-def _radial_cylinder_candidates(
-    candidates: list[float],
-    origin: np.ndarray,
-    direction: np.ndarray,
-    radius: float,
-) -> None:
-    if radius == 0:
-        return
-    ox, oy = origin[:2]
-    dx, dy = direction[:2]
-    _quadratic_candidates(
-        candidates,
-        dx * dx + dy * dy,
-        2.0 * (ox * dx + oy * dy),
-        ox * ox + oy * oy - radius * radius,
-    )
-
-
-def _sphere_candidates(
-    candidates: list[float],
-    origin: np.ndarray,
-    direction: np.ndarray,
-    radius: float,
-) -> None:
-    if radius == 0:
-        return
-    _quadratic_candidates(
-        candidates,
-        float(np.dot(direction, direction)),
-        2.0 * float(np.dot(origin, direction)),
-        float(np.dot(origin, origin) - radius * radius),
-    )
+def _radial_candidates(
+    origins: np.ndarray,
+    directions: np.ndarray,
+    radii: np.ndarray,
+    geometry: Geometry,
+) -> list[np.ndarray]:
+    candidates = []
+    for radius in radii:
+        if radius == 0:
+            continue
+        if geometry is Geometry.CYLINDRICAL:
+            a = directions[:, 0] ** 2 + directions[:, 1] ** 2
+            b = 2.0 * (
+                origins[:, 0] * directions[:, 0] + origins[:, 1] * directions[:, 1]
+            )
+            c = origins[:, 0] ** 2 + origins[:, 1] ** 2 - radius**2
+        else:
+            a = np.sum(directions * directions, axis=1)
+            b = 2.0 * np.sum(origins * directions, axis=1)
+            c = np.sum(origins * origins, axis=1) - radius**2
+        candidates.append(_quadratic_candidates(a, b, c))
+    return candidates
 
 
 def _phi_candidates(
-    candidates: list[float],
-    origin: np.ndarray,
-    direction: np.ndarray,
+    origins: np.ndarray,
+    directions: np.ndarray,
     phi_min: float,
     phi_max: float,
-) -> None:
+) -> list[np.ndarray]:
     if np.isclose(phi_max - phi_min, 2.0 * np.pi):
-        return
-    for phi in (phi_min, phi_max):
-        normal = np.asarray((-np.sin(phi), np.cos(phi), 0.0))
-        _plane_candidate(candidates, origin, direction, normal, 0.0)
+        return []
+    return [
+        _plane_candidates(
+            origins,
+            directions,
+            np.asarray((-np.sin(phi), np.cos(phi), 0.0)),
+            0.0,
+        )
+        for phi in (phi_min, phi_max)
+    ]
 
 
 def _theta_candidates(
-    candidates: list[float],
-    origin: np.ndarray,
-    direction: np.ndarray,
-    theta: float,
-) -> None:
+    origins: np.ndarray, directions: np.ndarray, theta: float
+) -> np.ndarray | None:
     if np.isclose(theta, 0.0) or np.isclose(theta, np.pi):
-        return
+        return None
     if np.isclose(theta, np.pi / 2.0):
-        _plane_candidate(
-            candidates,
-            origin,
-            direction,
+        return _plane_candidates(
+            origins,
+            directions,
             np.asarray((0.0, 0.0, 1.0)),
             0.0,
         )
-        return
     cosine_squared = np.cos(theta) ** 2
     sine_squared = np.sin(theta) ** 2
-    ox, oy, oz = origin
-    dx, dy, dz = direction
-    _quadratic_candidates(
-        candidates,
+    ox, oy, oz = np.moveaxis(origins, -1, 0)
+    dx, dy, dz = np.moveaxis(directions, -1, 0)
+    return _quadratic_candidates(
         cosine_squared * (dx * dx + dy * dy) - sine_squared * dz * dz,
         2.0 * (cosine_squared * (ox * dx + oy * dy) - sine_squared * oz * dz),
         cosine_squared * (ox * ox + oy * oy) - sine_squared * oz * oz,
@@ -164,36 +164,38 @@ def _theta_candidates(
 
 
 def _boundary_candidates(
-    grid: Grid,
-    origin: np.ndarray,
-    direction: np.ndarray,
-) -> list[float]:
-    extents = np.asarray(grid.extents, dtype=np.float64)
-    candidates: list[float] = []
-    if grid.geom is Geometry.CARTESIAN:
-        for axis in grid.active_axes:
+    origins: np.ndarray,
+    directions: np.ndarray,
+    geometry: Geometry,
+    dimensions: int,
+    extents: np.ndarray,
+) -> np.ndarray:
+    candidates: list[np.ndarray] = []
+    if geometry is Geometry.CARTESIAN:
+        for axis in range(dimensions):
             normal = np.zeros(3)
             normal[axis] = 1.0
-            for boundary in extents[axis]:
-                _plane_candidate(candidates, origin, direction, normal, boundary)
-        return candidates
+            candidates.extend(
+                _plane_candidates(origins, directions, normal, boundary)
+                for boundary in extents[axis]
+            )
+        return np.concatenate(candidates, axis=1)
 
-    for radius in extents[0]:
-        if grid.geom is Geometry.CYLINDRICAL:
-            _radial_cylinder_candidates(candidates, origin, direction, radius)
-        else:
-            _sphere_candidates(candidates, origin, direction, radius)
-    _phi_candidates(candidates, origin, direction, *extents[1])
-
-    if grid.geom is Geometry.CYLINDRICAL:
-        if grid.dimensions == 3:
-            z_normal = np.asarray((0.0, 0.0, 1.0))
-            for boundary in extents[2]:
-                _plane_candidate(candidates, origin, direction, z_normal, boundary)
+    candidates.extend(_radial_candidates(origins, directions, extents[0], geometry))
+    candidates.extend(_phi_candidates(origins, directions, *extents[1]))
+    if geometry is Geometry.CYLINDRICAL:
+        if dimensions == 3:
+            normal = np.asarray((0.0, 0.0, 1.0))
+            candidates.extend(
+                _plane_candidates(origins, directions, normal, boundary)
+                for boundary in extents[2]
+            )
     else:
         for theta in extents[2]:
-            _theta_candidates(candidates, origin, direction, theta)
-    return candidates
+            candidate = _theta_candidates(origins, directions, theta)
+            if candidate is not None:
+                candidates.append(candidate)
+    return np.concatenate(candidates, axis=1)
 
 
 def ray_grid_entry_distance(
@@ -225,28 +227,52 @@ def ray_grid_entry_distance(
         raise ValueError("ray directions must be nonzero")
     flat_directions = flat_directions / norms[:, None]
 
-    distances = np.full(flat_origins.shape[0], np.inf, dtype=np.float64)
-    for ray_index, (origin, direction) in enumerate(
-        zip(flat_origins, flat_directions, strict=True)
-    ):
-        if forward_only and _inside(grid, origin):
-            distances[ray_index] = 0.0
-            continue
-        candidates = _boundary_candidates(grid, origin, direction)
-        tolerance = (
-            512.0
-            * np.finfo(np.float64).eps
-            * max(1.0, grid_characteristic_length(grid))
+    extents = np.asarray(grid.extents, dtype=np.float64)
+    active_extents = extents[: grid.dimensions]
+    scales = np.maximum(1.0, np.max(np.abs(active_extents), axis=1))
+    coordinate_tolerances = 512.0 * np.finfo(np.float64).eps * scales
+    distance_tolerance = (
+        512.0
+        * np.finfo(np.float64).eps
+        * max(1.0, _characteristic_length(grid.geom, grid.dimensions, extents))
+    )
+
+    candidates = _boundary_candidates(
+        flat_origins,
+        flat_directions,
+        grid.geom,
+        grid.dimensions,
+        extents,
+    )
+    finite = np.isfinite(candidates)
+    safe_candidates = np.where(finite, candidates, 0.0)
+    candidate_points = (
+        flat_origins[:, None, :]
+        + safe_candidates[..., None] * flat_directions[:, None, :]
+    )
+    valid = finite & _inside(
+        candidate_points,
+        grid.geom,
+        grid.dimensions,
+        extents,
+        coordinate_tolerances,
+    )
+    if forward_only:
+        valid &= candidates >= -distance_tolerance
+        candidate_distances = np.maximum(candidates, 0.0)
+    else:
+        candidate_distances = candidates
+    distances = np.min(
+        np.where(valid, candidate_distances, np.inf),
+        axis=1,
+    )
+    if forward_only:
+        origins_inside = _inside(
+            flat_origins,
+            grid.geom,
+            grid.dimensions,
+            extents,
+            coordinate_tolerances,
         )
-        valid = []
-        for distance in candidates:
-            if not np.isfinite(distance):
-                continue
-            if forward_only and distance < -tolerance:
-                continue
-            point = origin + distance * direction
-            if _inside(grid, point):
-                valid.append(max(distance, 0.0) if forward_only else distance)
-        if valid:
-            distances[ray_index] = min(valid)
+        distances = np.where(origins_inside, 0.0, distances)
     return distances.reshape(leading_shape)

@@ -114,6 +114,63 @@ def _triangle_offsets(axis_x, axis_y, radius: float) -> np.ndarray:
     )
 
 
+@jax.jit
+def _initialize_plasma_state(grid: Grid, state, frequencies, directions):
+    """Set plasma-dependent launch data in one compiled JAX calculation."""
+    all_positions = state[..., RAY_STATE_LAYOUT.position]
+    all_neighbour_positions = state[..., RAY_STATE_LAYOUT.neighbour_positions].reshape(
+        (*state.shape[:-1], 3, 3)
+    )
+    primary_hydro = grid.interpolate(all_positions)
+    neighbour_hydro = grid.interpolate(all_neighbour_positions)
+    frequencies = frequencies[:, None, None]
+    ncritical = critical_density(frequencies)
+    primary_epsilon = safe_permittivity(primary_hydro.ne / ncritical)
+    neighbour_epsilon = safe_permittivity(neighbour_hydro.ne / ncritical[..., None])
+    directions = directions[:, None, None, :]
+    primary_momenta = directions * jnp.sqrt(primary_epsilon)[..., None]
+    neighbour_momenta = (
+        directions[..., None, :] * jnp.sqrt(neighbour_epsilon)[..., None]
+    )
+    state = state.at[..., RAY_STATE_LAYOUT.momentum].set(primary_momenta)
+    state = state.at[..., RAY_STATE_LAYOUT.neighbour_momenta].set(
+        neighbour_momenta.reshape((*state.shape[:-1], 9))
+    )
+    state = state.at[..., RAY_STATE_LAYOUT.permittivity].set(primary_epsilon)
+
+    position_tangents = all_neighbour_positions - all_positions[..., None, :]
+    flat_positions = all_positions.reshape((-1, 3))
+    flat_frequencies = jnp.broadcast_to(frequencies, all_positions.shape[:-1]).reshape(
+        (-1,)
+    )
+    flat_directions = jnp.broadcast_to(directions, all_positions.shape).reshape((-1, 3))
+    flat_position_tangents = position_tangents.reshape((-1, 3, 3))
+
+    def one_tube(position, frequency, direction, tangents):
+        ncritical = critical_density(frequency)
+
+        def initial_momentum(query_position):
+            density = grid.interpolate(query_position).ne
+            epsilon = safe_permittivity(density / ncritical)
+            return direction * jnp.sqrt(epsilon)
+
+        return jax.vmap(
+            lambda tangent: jax.jvp(
+                initial_momentum,
+                (position,),
+                (tangent,),
+            )[1]
+        )(tangents)
+
+    neighbour_momentum_tangents = jax.vmap(one_tube)(
+        flat_positions,
+        flat_frequencies,
+        flat_directions,
+        flat_position_tangents,
+    ).reshape((*state.shape[:-1], 9))
+    return state, neighbour_momentum_tangents
+
+
 def initialize_rays(
     beams: BeamBatch,
     grid: Grid,
@@ -328,60 +385,12 @@ def initialize_rays(
             initial_electric_field
         )
 
-    all_positions = jnp.asarray(state[..., RAY_STATE_LAYOUT.position])
-    all_neighbour_positions = jnp.asarray(
-        state[..., RAY_STATE_LAYOUT.neighbour_positions]
-    ).reshape((*state.shape[:-1], 3, 3))
-    primary_hydro = grid.interpolate(all_positions)
-    neighbour_hydro = grid.interpolate(all_neighbour_positions)
-    frequencies_jax = jnp.asarray(frequencies)[:, None, None]
-    ncritical = critical_density(frequencies_jax)
-    primary_epsilon = safe_permittivity(primary_hydro.ne / ncritical)
-    neighbour_epsilon = safe_permittivity(neighbour_hydro.ne / ncritical[..., None])
-    direction_jax = jnp.asarray(directions)[:, None, None, :]
-    primary_momenta = direction_jax * jnp.sqrt(primary_epsilon)[..., None]
-    neighbour_momenta = (
-        direction_jax[..., None, :] * jnp.sqrt(neighbour_epsilon)[..., None]
+    state_jax, neighbour_momentum_tangents = _initialize_plasma_state(
+        grid,
+        jnp.asarray(state),
+        jnp.asarray(frequencies),
+        jnp.asarray(directions),
     )
-    state_jax = jnp.asarray(state)
-    state_jax = state_jax.at[..., RAY_STATE_LAYOUT.momentum].set(primary_momenta)
-    state_jax = state_jax.at[..., RAY_STATE_LAYOUT.neighbour_momenta].set(
-        neighbour_momenta.reshape((*state.shape[:-1], 9))
-    )
-    state_jax = state_jax.at[..., RAY_STATE_LAYOUT.permittivity].set(primary_epsilon)
-
-    position_tangents = all_neighbour_positions - all_positions[..., None, :]
-    flat_positions = all_positions.reshape((-1, 3))
-    flat_frequencies = jnp.broadcast_to(
-        frequencies_jax, all_positions.shape[:-1]
-    ).reshape((-1,))
-    flat_directions = jnp.broadcast_to(direction_jax, all_positions.shape).reshape(
-        (-1, 3)
-    )
-    flat_position_tangents = position_tangents.reshape((-1, 3, 3))
-
-    def one_tube(position, frequency, direction, tangents):
-        ncritical = critical_density(frequency)
-
-        def initial_momentum(query_position):
-            density = grid.interpolate(query_position).ne
-            epsilon = safe_permittivity(density / ncritical)
-            return direction * jnp.sqrt(epsilon)
-
-        return jax.vmap(
-            lambda tangent: jax.jvp(
-                initial_momentum,
-                (position,),
-                (tangent,),
-            )[1]
-        )(tangents)
-
-    neighbour_momentum_tangents = jax.vmap(one_tube)(
-        flat_positions,
-        flat_frequencies,
-        flat_directions,
-        flat_position_tangents,
-    ).reshape((*state.shape[:-1], 9))
     return InitializedRays(
         state=state_jax,
         will_hit_grid=jnp.asarray(will_hit),
