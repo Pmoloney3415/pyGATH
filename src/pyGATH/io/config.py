@@ -26,6 +26,7 @@ from pyGATH.raytracing import (
     RayTracingOptions,
     trace_rays,
 )
+from pyGATH.reporting import ReportingConfig, reported_stage
 
 from .beams_io import load_beams_csv
 
@@ -405,9 +406,17 @@ class SimulationConfig:
     beams: BeamsConfig | None
     raytracing: RayTracingConfig
     physics: PhysicsConfig
+    logging: ReportingConfig
     extra_sections: Mapping[str, Any]
     source: Path
 
+    @reported_stage(
+        "build grid",
+        describe=lambda grid: (
+            f"{grid.geom.value} {grid.dimensions}D, "
+            f"{tuple(grid.ncells[: grid.dimensions])} cells"
+        ),
+    )
     def build_grid(
         self,
         initial_conditions: Mapping[str, Callable[[Any], HydroFields]] | None = None,
@@ -415,6 +424,11 @@ class SimulationConfig:
         """Build the configured grid using built-in or supplied initial conditions."""
         return self.grid.build(initial_conditions=initial_conditions)
 
+    @reported_stage(
+        "load beams",
+        describe=lambda beams: f"{beams.nbeams:,} beams",
+        synchronize_result=False,
+    )
     def load_beams(self) -> BeamBatch:
         """Load the beam list referenced by the simulation deck."""
         if self.beams is None:
@@ -436,6 +450,10 @@ class SimulationConfig:
             grid,
             self.physics.inverse_bremsstrahlung,
         )
+
+    def reporting(self):
+        """Return a simulation-scoped reporter configured by ``[logging]``."""
+        return self.logging.reporter()
 
 
 def _parse_beams(raw_beams: Any, source: Path, grid_config: GridConfig) -> BeamsConfig:
@@ -703,6 +721,46 @@ def _parse_grid(raw_grid: Any) -> GridConfig:
     )
 
 
+def _parse_logging(raw_logging: Any, source: Path) -> ReportingConfig:
+    location = "[logging]"
+    if raw_logging is None:
+        return ReportingConfig()
+    logging = _expect_table(raw_logging, location)
+    _reject_unknown(
+        logging,
+        {"verbosity", "console", "file", "progress_interval_s"},
+        location,
+    )
+    verbosity = logging.get("verbosity", 1)
+    if isinstance(verbosity, bool) or not isinstance(verbosity, int):
+        raise ConfigError(f"{location}.verbosity must be an integer")
+    if verbosity not in range(4):
+        raise ConfigError(f"{location}.verbosity must be between zero and three")
+    console = _boolean(logging.get("console", True), f"{location}.console")
+    log_file = None
+    if "file" in logging:
+        raw_file = logging["file"]
+        if not isinstance(raw_file, str) or not raw_file.strip():
+            raise ConfigError(f"{location}.file must be a non-empty path string")
+        log_file = Path(raw_file)
+        if not log_file.is_absolute():
+            log_file = source.parent / log_file
+        log_file = log_file.resolve()
+    if verbosity > 0 and not console and log_file is None:
+        raise ConfigError(
+            f"{location} must enable console output or provide a file when verbose"
+        )
+    return ReportingConfig(
+        verbosity=verbosity,
+        console=console,
+        file=log_file,
+        progress_interval_s=_positive_number(
+            logging.get("progress_interval_s", 5.0),
+            f"{location}.progress_interval_s",
+        ),
+    )
+
+
 def load_simulation_config(path: str | Path) -> SimulationConfig:
     """Load a TOML simulation deck and strictly validate its grid section."""
     source = Path(path)
@@ -726,16 +784,18 @@ def load_simulation_config(path: str | Path) -> SimulationConfig:
     )
     raytracing = _parse_raytracing(raw_config.get("raytracing"))
     physics = _parse_physics(raw_config.get("physics"))
+    logging = _parse_logging(raw_config.get("logging"), source)
     extra_sections = {
         name: value
         for name, value in raw_config.items()
-        if name not in {"grid", "beams", "raytracing", "physics"}
+        if name not in {"grid", "beams", "raytracing", "physics", "logging"}
     }
     return SimulationConfig(
         grid=grid,
         beams=beams,
         raytracing=raytracing,
         physics=physics,
+        logging=logging,
         extra_sections=extra_sections,
         source=source,
     )

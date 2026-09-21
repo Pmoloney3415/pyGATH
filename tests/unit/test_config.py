@@ -62,6 +62,9 @@ def test_example_deck_loads_and_builds_float64_grid():
     assert simulation.beams.power.total_power_w == 1.0e12
     assert simulation.raytracing.nsamples_per_sheet == 20
     assert simulation.raytracing.dt0 is None
+    assert simulation.logging.verbosity == 2
+    assert simulation.logging.console
+    assert simulation.logging.file is None
     assert simulation.physics.inverse_bremsstrahlung.enabled
     np.testing.assert_allclose(grid.composition.mean_charge, 3.5)
     np.testing.assert_allclose(grid.hydro.ni, grid.hydro.ne / 3.5)
@@ -277,4 +280,31 @@ dt0 = 1e-5
         encoding="utf-8",
     )
     with pytest.raises(ConfigError, match="at least two"):
+        load_simulation_config(path)
+
+
+def test_logging_section_is_strict_and_resolves_file_from_deck(tmp_path):
+    path = tmp_path / "simulation.toml"
+    path.write_text(
+        _cartesian_deck()
+        + """
+[logging]
+verbosity = 3
+console = false
+file = "logs/run.log"
+progress_interval_s = 0.25
+""",
+        encoding="utf-8",
+    )
+    logging = load_simulation_config(path).logging
+    assert logging.verbosity == 3
+    assert not logging.console
+    assert logging.file == tmp_path / "logs" / "run.log"
+    assert logging.progress_interval_s == 0.25
+
+    path.write_text(
+        _cartesian_deck() + "\n[logging]\nverbosity = 4\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="between zero and three"):
         load_simulation_config(path)

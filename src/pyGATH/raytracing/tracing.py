@@ -11,6 +11,7 @@ import jax.numpy as jnp
 import optimistix as optx
 
 from pyGATH.grid import Geometry, Grid, convert_positions
+from pyGATH.reporting import ProgressTracker, reported_stage, synchronize
 
 from .plasma import (
     SPEED_OF_LIGHT,
@@ -820,6 +821,14 @@ def _grid_characteristic_length(grid):
     return jnp.linalg.norm(jnp.stack(resolved_lengths))
 
 
+@reported_stage(
+    "trace rays",
+    describe=lambda result: (
+        f"{result.sheet_fields.shape[0]:,} beams, "
+        f"{result.sheet_fields.shape[1]:,} sheets, "
+        f"{result.sheet_fields.shape[-2]:,} samples per sheet"
+    ),
+)
 def trace_rays(
     initial_rays,
     grid: Grid,
@@ -899,6 +908,7 @@ def trace_rays(
         rtol=root_relative_tolerance,
         atol=root_relative_tolerance * characteristic_length,
     )
+    progress = ProgressTracker("trace rays", 4, "phases")
     exit_solution = diffrax.diffeqsolve(
         diffrax.ODETerm(_scaled_primary_ray_rhs),
         diffrax.Tsit5(),
@@ -917,6 +927,9 @@ def trace_rays(
         max_steps=options.max_steps,
         throw=False,
     )
+    if progress.reporter is not None and progress.reporter.config.verbosity >= 2:
+        synchronize(exit_solution)
+    progress.update(1, message="exit solve complete", force=True)
     terminal_path = exit_solution.ts[0]
     paths = jnp.linspace(
         0.0, terminal_path, options.diagnostic_samples, dtype=state.dtype
@@ -934,6 +947,9 @@ def trace_rays(
         max_steps=options.max_steps,
         throw=False,
     )
+    if progress.reporter is not None and progress.reporter.config.verbosity >= 2:
+        synchronize(diagnostic_solution)
+    progress.update(2, message="diagnostic solve complete", force=True)
     diagnostics = diagnostic_solution.ys
     omega = state[..., RAY_STATE_LAYOUT.frequency]
     amplitude_limit = _amplitude_limit_history(
@@ -963,6 +979,9 @@ def trace_rays(
         dt0,
         inverse_bremsstrahlung,
     )
+    if progress.reporter is not None and progress.reporter.config.verbosity >= 2:
+        synchronize(sampled_state)
+    progress.update(3, message="sheet resampling complete", force=True)
     sampled_scaling = _StateScaling(
         scales=scaling.scales[..., None, None, :],
         position_reference=scaling.position_reference[..., None, None, :],
@@ -1047,7 +1066,7 @@ def trace_rays(
     sheet_fields = jnp.moveaxis(sheet_fields, 3, 1)
     initial_path = state[..., RAY_STATE_LAYOUT.path_length]
     absolute_caustic_path = jnp.where(has_caustic, initial_path + caustic_path, jnp.inf)
-    return RayTraceResult(
+    result = RayTraceResult(
         sheet_fields=sheet_fields,
         has_caustic=has_caustic,
         caustic_path=absolute_caustic_path,
@@ -1055,6 +1074,10 @@ def trace_rays(
         terminal_path=terminal_path,
         terminated=jnp.asarray(exit_solution.event_mask),
     )
+    if progress.reporter is not None and progress.reporter.config.verbosity >= 2:
+        synchronize(result)
+    progress.update(4, message="sheet fields assembled", force=True)
+    return result
 
 
 __all__ = [

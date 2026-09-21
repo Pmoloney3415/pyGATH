@@ -21,6 +21,7 @@ from pyGATH.raytracing.plasma import (
     safe_permittivity,
 )
 from pyGATH.raytracing.raystatelayout import RAY_STATE_LAYOUT
+from pyGATH.reporting import ProgressTracker, reported_stage
 
 from .beam import BeamBatch
 
@@ -171,6 +172,13 @@ def _initialize_plasma_state(grid: Grid, state, frequencies, directions):
     return state, neighbour_momentum_tangents
 
 
+@reported_stage(
+    "initialize rays",
+    describe=lambda rays: (
+        f"{rays.state.shape[0]:,} beams, "
+        f"{int(np.prod(rays.state.shape[1:3])):,} ray tubes per beam"
+    ),
+)
 def initialize_rays(
     beams: BeamBatch,
     grid: Grid,
@@ -293,6 +301,7 @@ def initialize_rays(
     powers = np.asarray(beams.power_fraction, dtype=np.float64)
     peak_intensities = np.asarray(beams.peak_intensity, dtype=np.float64)
 
+    progress = ProgressTracker("initialize rays", beams.nbeams, "beams")
     for beam_index in range(beams.nbeams):
         if grid.dimensions == 1:
             impact_x = np.zeros((1, 1), dtype=np.float64)
@@ -384,6 +393,7 @@ def initialize_rays(
         state[beam_index, ..., RAY_STATE_LAYOUT.initial_electric_field] = (
             initial_electric_field
         )
+        progress.update(beam_index + 1)
 
     state_jax, neighbour_momentum_tangents = _initialize_plasma_state(
         grid,

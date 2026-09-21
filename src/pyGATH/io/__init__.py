@@ -1,5 +1,7 @@
 """Simulation input/output helpers."""
 
+from pyGATH.reporting import ReportingConfig
+
 from .beams_io import BeamFileError, load_beams_csv
 from .config import (
     BeamPowerConfig,
@@ -20,6 +22,7 @@ __all__ = [
     "GridConfig",
     "PhysicsConfig",
     "RayTracingConfig",
+    "ReportingConfig",
     "SimulationConfig",
     "load_beams_csv",
     "load_simulation_config",

@@ -33,7 +33,11 @@ pip-wheel-metadata/
 # Generated example and test data
 .temp_examples/
 .test-tmp-*/
+.test_tmp_*/
 .ipynb_checkpoints/
+*_progress.jsonl
+*_profile.csv
+*.log
 
 # Local configuration and secrets
 .env
