@@ -1,11 +1,21 @@
-"""Spatial field construction and interpolation."""
+"""Simplicial field construction, interpolation, and conservative deposition."""
 
-from .deposition import (
-    GridPowerDeposition,
-    deposit_tetrahedral_power,
-    grid_cell_volumes,
+from .deposition import PowerDeposition
+from .deposition_mesh import (
+    SimplicialDepositionMesh,
+    build_cartesian_deposition_mesh_from_grid,
+    build_circular_deposition_mesh,
+    build_circular_deposition_mesh_from_grid,
+    build_geodesic_deposition_mesh,
+    build_geodesic_deposition_mesh_from_grid,
+    build_linear_deposition_mesh,
+    build_linear_deposition_mesh_from_grid,
 )
 from .fieldlayout import FIELD_LAYOUT, FieldLayout, FieldSelection
+from .mesh_deposition import (
+    ResolvedPowerDeposition,
+    deposit_simplicial_power_to_mesh,
+)
 from .simplicial import (
     InterpolatedSimplicialFields,
     SimplicialField,
@@ -16,38 +26,28 @@ from .simplicial import (
     replace_simplicial_field_values,
     simplicialise_sheet_fields,
 )
-from .simplicial_deposition import deposit_simplicial_power
-from .tetrahedral import (
-    InterpolatedTetrahedralFields,
-    TetrahedralField,
-    TetrahedralMesh,
-    interpolate_tetrahedral_fields,
-    interpolate_tetrahedral_fields_batched,
-    replace_tetrahedral_field_values,
-    tetrahedralise_sheet_fields,
-)
 
 __all__ = [
     "FIELD_LAYOUT",
     "FieldLayout",
     "FieldSelection",
-    "GridPowerDeposition",
     "InterpolatedSimplicialFields",
-    "InterpolatedTetrahedralFields",
+    "PowerDeposition",
+    "ResolvedPowerDeposition",
+    "SimplicialDepositionMesh",
     "SimplicialField",
     "SimplicialMesh",
-    "TetrahedralField",
-    "TetrahedralMesh",
-    "deposit_simplicial_power",
-    "deposit_tetrahedral_power",
-    "grid_cell_volumes",
+    "build_cartesian_deposition_mesh_from_grid",
+    "build_circular_deposition_mesh",
+    "build_circular_deposition_mesh_from_grid",
+    "build_geodesic_deposition_mesh",
+    "build_geodesic_deposition_mesh_from_grid",
+    "build_linear_deposition_mesh",
+    "build_linear_deposition_mesh_from_grid",
+    "deposit_simplicial_power_to_mesh",
     "interpolate_simplicial_fields",
     "interpolate_simplicial_fields_batched",
     "interpolate_simplicial_fields_to_cells",
-    "interpolate_tetrahedral_fields",
-    "interpolate_tetrahedral_fields_batched",
     "replace_simplicial_field_values",
-    "replace_tetrahedral_field_values",
     "simplicialise_sheet_fields",
-    "tetrahedralise_sheet_fields",
 ]
