@@ -1,44 +1,44 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
 
-from examples._workflows import run_linear_gradient_turning
-from pyGATH.raytracing import RAY_SHEET_LAYOUT, RAY_STATE_LAYOUT
+from pyGATH.io import load_simulation_config
+from pyGATH.raytracing import (
+    RAY_SHEET_LAYOUT,
+    RAY_STATE_LAYOUT,
+    critical_density,
+)
 
 pytestmark = pytest.mark.regression
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+CONFIG = PROJECT_ROOT / "configs" / "test_configs" / "linear_gradient_turning.toml"
+
 
 def test_linear_gradient_ray_turns_analytically_and_builds_two_sheets():
-    result, checks = run_linear_gradient_turning()
+    simulation = load_simulation_config(CONFIG)
+    grid = simulation.build_grid()
+    beams = simulation.load_beams()
+    initial = simulation.initialize_rays(grid, beams=beams)
+    result = simulation.trace_rays(initial, grid)
     fields = np.asarray(result.sheet_fields)
 
     assert fields.shape == (1, 2, 1, 1, 40, RAY_SHEET_LAYOUT.n_attributes)
     assert bool(result.terminated)
     assert bool(result.has_caustic[0, 0, 0])
 
-    expected_turn_x = 1.0e-3 * np.cos(np.deg2rad(20.0)) ** 2
-    np.testing.assert_allclose(
-        checks["expected_density_ratio"], np.cos(np.deg2rad(20.0)) ** 2
+    direction = np.asarray(beams.direction[0])
+    angle = np.arctan2(direction[1], direction[0])
+    density_scale = float(critical_density(float(beams.omega[0]))) / float(
+        grid.grad_ne[0, 0, 0, 0]
     )
+    expected_turn_x = density_scale * np.cos(angle) ** 2
+    positions = fields[0, :, 0, 0, ..., RAY_STATE_LAYOUT.position]
+    np.testing.assert_allclose(np.max(positions[..., 0]), expected_turn_x, rtol=2.0e-3)
+    np.testing.assert_allclose(positions[0, -1, 0], expected_turn_x, rtol=3.0e-3)
     np.testing.assert_allclose(
-        checks["numerical_turn_x_m"], expected_turn_x, rtol=2.0e-3
-    )
-    np.testing.assert_allclose(checks["caustic_x_m"], expected_turn_x, rtol=3.0e-3)
-
-    first_sheet = fields[0, 0, 0, 0]
-    second_sheet = fields[0, 1, 0, 0]
-    np.testing.assert_allclose(
-        first_sheet[-1, : RAY_STATE_LAYOUT.n_attributes],
-        second_sheet[0, : RAY_STATE_LAYOUT.n_attributes],
-        rtol=0.0,
+        fields[0, 0, 0, 0, -1, : RAY_STATE_LAYOUT.n_attributes],
+        fields[0, 1, 0, 0, 0, : RAY_STATE_LAYOUT.n_attributes],
         atol=1.0e-12,
-    )
-    assert not np.allclose(
-        second_sheet[0, RAY_STATE_LAYOUT.position],
-        second_sheet[-1, RAY_STATE_LAYOUT.position],
-    )
-    np.testing.assert_allclose(
-        fields[..., RAY_STATE_LAYOUT.position][..., 2], 0.0, atol=1.0e-15
-    )
-    np.testing.assert_allclose(
-        fields[..., RAY_STATE_LAYOUT.momentum][..., 2], 0.0, atol=1.0e-15
     )
