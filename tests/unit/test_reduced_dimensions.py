@@ -6,13 +6,14 @@ import pytest
 
 from pyGATH.beam import initialize_rays
 from pyGATH.fields import (
-    deposit_simplicial_power,
-    grid_cell_volumes,
+    build_cartesian_deposition_mesh_from_grid,
+    build_linear_deposition_mesh_from_grid,
+    deposit_simplicial_power_to_mesh,
     interpolate_simplicial_fields,
     interpolate_simplicial_fields_to_cells,
     simplicialise_sheet_fields,
 )
-from pyGATH.grid import Grid, HydroFields, SafeHydroState
+from pyGATH.grid import Grid, HydroFields, SafeHydroState, cell_volumes
 from pyGATH.io import load_simulation_config
 from pyGATH.io.beams_io import load_beams_csv
 from pyGATH.raytracing import (
@@ -45,7 +46,7 @@ def test_reduced_grids_generate_reference_axes_and_effective_volumes():
     assert one_d.ncells == (2, 1, 1)
     np.testing.assert_allclose(one_d.yb, (-1.5, 1.5))
     np.testing.assert_allclose(one_d.zb, (-2.0, 2.0))
-    np.testing.assert_allclose(grid_cell_volumes(one_d), 12.0)
+    np.testing.assert_allclose(cell_volumes(one_d), 12.0)
 
     polar = Grid.create(
         geom="cylindrical",
@@ -55,7 +56,7 @@ def test_reduced_grids_generate_reference_axes_and_effective_volumes():
         inactive_axis_lengths_m=(2.0,),
     )
     assert polar.ncells == (1, 1, 1)
-    np.testing.assert_allclose(grid_cell_volumes(polar), 1.5 * np.pi)
+    np.testing.assert_allclose(cell_volumes(polar), 1.5 * np.pi)
 
 
 def test_reduced_config_requires_only_active_axes(tmp_path):
@@ -450,12 +451,13 @@ def test_reduced_simplicial_deposition_is_conservative_and_volumetric(
         ncells=ncells,
         inactive_axis_lengths_m=inactive_lengths,
     )
-    deposition = deposit_simplicial_power(
-        field,
-        grid,
-        relative_tolerance=0.0,
-        max_subdivision_levels=2,
-        simplex_batch_size=4,
+    mesh = (
+        build_linear_deposition_mesh_from_grid(grid)
+        if dimension == 1
+        else build_cartesian_deposition_mesh_from_grid(grid)
+    )
+    deposition = deposit_simplicial_power_to_mesh(
+        field, mesh, pair_batch_size=4, source_batch_size=4
     )
 
     np.testing.assert_allclose(deposition.source_power, expected_power, rtol=1.0e-13)
