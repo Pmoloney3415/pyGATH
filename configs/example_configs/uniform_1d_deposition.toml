@@ -59,7 +59,7 @@ Ti = 35.0
 grad_ne = [0.0, 0.0, 0.0]
 velocity = [0.0, 0.0, 0.0]
 
-[deposition]
-max_subdivision_levels = 2
-relative_tolerance = 1e-3
-simplex_batch_size = 512
+[logging]
+verbosity = 2
+console = true
+progress_interval_s = 5.0

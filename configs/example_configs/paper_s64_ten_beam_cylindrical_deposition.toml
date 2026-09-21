@@ -2,7 +2,7 @@
 
 [beams]
 file = "../../beam_csvs/example_beam_csvs/paper_s64_ten_beams.csv"
-nrays_axis1 = 24
+nrays_axis1 = 32
 nrays_axis2 = 1
 intensity_cutoff = 2e-4
 neighbour_spacing_m = 1e-9
@@ -17,7 +17,7 @@ enabled = true
 critical_collision_frequency_hz = 2.0645e14
 
 [raytracing]
-nsamples_per_sheet = 160
+nsamples_per_sheet = 32
 diagnostic_samples = 512
 maximum_path_length_grid_lengths = 5.0
 rtol = 1e-4
@@ -41,13 +41,13 @@ fraction = 1.0
 min = 0.0
 max = 2.0e-5
 spacing = "uniform"
-ncells = 80
+ncells = 60
 
 [grid.axes.phi]
 min = -1.0
 max = 1.0
 spacing = "uniform"
-ncells = 160
+ncells = 120
 
 [grid.initial_condition]
 name = "omega_lilac_azimuthal_2d"
@@ -72,7 +72,7 @@ Ti = 35.0
 grad_ne = [0.0, 0.0, 0.0]
 velocity = [0.0, 0.0, 0.0]
 
-[deposition]
-max_subdivision_levels = 4
-relative_tolerance = 1e-4
-simplex_batch_size = 4096
+[logging]
+verbosity = 2
+console = true
+progress_interval_s = 5.0

@@ -1,12 +1,11 @@
-# Full-scale OMEGA/LILAC-fit example based on Follett et al., Phys. Plasmas
-# 29, 113902 (2022). Spatial quantities are SI; angular bounds are fractions
-# of pi. The 8x8 ray sampling and 10 samples/sheet are an intentionally coarse
-# end-to-end starting point. A 20x20x20 run creates 4,938,480 tetrahedra.
+# Compact OMEGA-like example using exact conservative overlap onto a
+# straight-sided layered geodesic tetrahedral mesh. Spatial quantities are SI;
+# angular hydro bounds are fractions of pi.
 
 [beams]
-file = "../../beam_csvs/example_beam_csvs/omega_60_beams.csv"
-nrays_axis1 = 8
-nrays_axis2 = 8
+file = "../../beam_csvs/example_beam_csvs/omega_single_beam_caustic.csv"
+nrays_axis1 = 20
+nrays_axis2 = 20
 intensity_cutoff = 2e-4
 neighbour_spacing_m = 1e-9
 launch_padding = 10.0
@@ -19,8 +18,8 @@ enabled = true
 minimum_coulomb_log = 2.0
 
 [raytracing]
-nsamples_per_sheet = 10
-diagnostic_samples = 256
+nsamples_per_sheet = 20
+diagnostic_samples = 96
 maximum_path_length_grid_lengths = 10.0
 rtol = 1e-4
 atol = 1e-6
@@ -31,7 +30,6 @@ minimum_amplitude_cap = 1.1
 [grid]
 geometry = "spherical"
 
-# The paper uses a single effective ion with Z=3.1 and mi/me=10319.2.
 [[grid.composition.elements]]
 name = "effective_ion"
 A = 5.6609
@@ -39,25 +37,24 @@ Z = 3.1
 fraction = 1.0
 
 [grid.axes.r]
-# Physical critical radius is 357.142 um; start 10 um inside it.
 min = 3.47141781908e-4
 max = 1.2e-3
 spacing = "graded"
 boundaries = [4.5e-4, 7.0e-4]
-cell_sizes = [5e-6, 15e-6, 50e-6]
+cell_sizes = [2.5e-6, 7.5e-6, 25e-6]
 transition_widths = [8e-5, 2e-4]
 
 [grid.axes.phi]
 min = -1.0
 max = 1.0
 spacing = "uniform"
-ncells = 80
+ncells = 40
 
 [grid.axes.theta]
 min = 0.0
 max = 1.0
 spacing = "uniform"
-ncells = 40
+ncells = 20
 
 [grid.initial_condition]
 name = "omega_lilac_fit"
@@ -77,7 +74,7 @@ Ti = 1.0e3
 grad_ne = [0.0, 0.0, 0.0]
 velocity = [0.0, 0.0, 0.0]
 
-[deposition]
-max_subdivision_levels = 1
-relative_tolerance = 1e-2
-tetrahedron_batch_size = 2048
+[logging]
+verbosity = 2
+console = true
+progress_interval_s = 5.0
