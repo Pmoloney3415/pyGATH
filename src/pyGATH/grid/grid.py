@@ -681,6 +681,27 @@ def interpolate_hydro(grid: Grid, cartesian_positions) -> HydroState:
     )
 
 
+def cell_volumes(grid: Grid):
+    """Return exact physical volumes for every native rectilinear cell."""
+    first_width = jnp.diff(grid.xb)
+    second_width = jnp.diff(grid.yb)
+    third_width = jnp.diff(grid.zb)
+    if grid.geom is Geometry.CARTESIAN:
+        first_factor = first_width
+        third_factor = third_width
+    elif grid.geom is Geometry.CYLINDRICAL:
+        first_factor = 0.5 * (grid.xb[1:] ** 2 - grid.xb[:-1] ** 2)
+        third_factor = third_width
+    else:
+        first_factor = (grid.xb[1:] ** 3 - grid.xb[:-1] ** 3) / 3.0
+        third_factor = jnp.cos(grid.zb[:-1]) - jnp.cos(grid.zb[1:])
+    return (
+        first_factor[:, None, None]
+        * second_width[None, :, None]
+        * third_factor[None, None, :]
+    )
+
+
 def contains(grid: Grid, cartesian_positions):
     """Return a JAX boolean mask for Cartesian positions inside ``grid``.
 

@@ -2,7 +2,14 @@
 
 from .composition import PlasmaComposition
 from .geometry import Geometry, convert_positions, convert_vectors
-from .grid import GradedAxis, Grid, GridCoordinates, contains, interpolate_hydro
+from .grid import (
+    GradedAxis,
+    Grid,
+    GridCoordinates,
+    cell_volumes,
+    contains,
+    interpolate_hydro,
+)
 from .hydro import HydroFields, HydroState, SafeHydroState
 
 __all__ = [
@@ -14,6 +21,7 @@ __all__ = [
     "HydroState",
     "PlasmaComposition",
     "SafeHydroState",
+    "cell_volumes",
     "contains",
     "convert_positions",
     "convert_vectors",
