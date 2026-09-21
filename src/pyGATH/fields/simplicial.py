@@ -11,6 +11,7 @@ import numpy as np
 
 from pyGATH.grid import Geometry, convert_positions
 from pyGATH.raytracing import RAY_STATE_LAYOUT
+from pyGATH.reporting import ProgressTracker, reported_stage
 
 from .fieldlayout import FieldSelection, resolve_field_selection
 
@@ -48,11 +49,6 @@ class SimplicialMesh:
     @property
     def nsimplices(self) -> int:
         return self.connectivity.shape[0]
-
-    @property
-    def ntetrahedra(self) -> int:
-        """Compatibility alias used by the legacy 3-D API."""
-        return self.nsimplices
 
     @property
     def active_components(self) -> tuple[int, ...]:
@@ -116,11 +112,6 @@ class InterpolatedSimplicialFields:
     inside: Any
     simplex_index: Any
     selection: FieldSelection
-
-    @property
-    def tet_index(self):
-        """Compatibility alias for legacy tetrahedral callers."""
-        return self.simplex_index
 
     def tree_flatten(self):
         return (self.values, self.inside, self.simplex_index), self.selection
@@ -268,6 +259,13 @@ def _validate_dimension_and_shape(dimension: int, logical_shape):
         raise ValueError("2-D sheet fields require nrays_axis2 to be one")
 
 
+@reported_stage(
+    "build simplicial sheet fields",
+    describe=lambda field: (
+        f"{field.mesh.nsimplices:,} simplices per sheet, "
+        f"{int(np.asarray(field.mesh.valid).sum()):,} active across all sheets"
+    ),
+)
 def simplicialise_sheet_fields(
     sheet_fields,
     *,
@@ -338,12 +336,19 @@ def simplicialise_sheet_fields(
     bounds_min = jnp.min(active_positions, axis=-2)
     bounds_max = jnp.max(active_positions, axis=-2)
     centroids = jnp.mean(active_positions, axis=-2)
+    progress = ProgressTracker("build simplicial sheet fields", 2, "phases")
+    valid_host = jax.device_get(valid)
+    centroids_host = jax.device_get(centroids)
+    bounds_min_host = jax.device_get(bounds_min)
+    bounds_max_host = jax.device_get(bounds_max)
+    progress.update(1, message="simplex geometry complete", force=True)
     bvh_data = _build_global_bvh(
-        jax.device_get(valid),
-        jax.device_get(centroids),
-        jax.device_get(bounds_min),
-        jax.device_get(bounds_max),
+        valid_host,
+        centroids_host,
+        bounds_min_host,
+        bounds_max_host,
     )
+    progress.update(2, message="field BVH complete", force=True)
     leaf_order, internal_min, internal_max, leaf_capacity, tree_depth = bvh_data
     mesh = SimplicialMesh(
         vertex_positions=positions,

@@ -10,12 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
-from pyGATH.fields import (
-    SimplicialField,
-    SimplicialMesh,
-    TetrahedralField,
-    TetrahedralMesh,
-)
+from pyGATH.fields import SimplicialField, SimplicialMesh
 from pyGATH.grid import Geometry, Grid, convert_positions, convert_vectors
 from pyGATH.raytracing import RAY_STATE_LAYOUT, RayTraceResult
 
@@ -27,9 +22,6 @@ _GRID_AXIS_NAMES = {
 _CARTESIAN_COMPONENTS = {"x": 0, "y": 1, "z": 2}
 _SCALAR_FIELDS = {"ne": "ne", "ni": "ni", "te": "Te", "ti": "Ti"}
 _VECTOR_FIELDS = {"grad_ne": "grad_ne", "velocity": "velocity"}
-_TETRAHEDRON_EDGES = np.asarray(
-    ((0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)), dtype=np.int32
-)
 
 
 def _projection_indices(projection: str) -> tuple[int, int]:
@@ -279,152 +271,6 @@ def plot_ray_trajectories(
     return ax, artists
 
 
-def plot_tetrahedral_mesh(
-    tetrahedral_field: TetrahedralField | TetrahedralMesh,
-    *,
-    beam_index: int = 0,
-    sheet_index: int = 0,
-    tetrahedron_stride: int = 1,
-    highlighted_tetrahedra: Sequence[int] = (),
-    highlight_edge_colors: Sequence[str] = (
-        "lime",
-        "cyan",
-        "deeppink",
-        "orange",
-        "yellow",
-    ),
-    highlight_vertex_colors: Sequence[str] = (
-        "green",
-        "darkcyan",
-        "mediumvioletred",
-        "darkorange",
-        "olive",
-    ),
-    ax=None,
-):
-    """Plot valid tetrahedral vertices and unique edges for one beam sheet.
-
-    The complete mesh is drawn with small black vertices and thin transparent
-    grey edges. ``tetrahedron_stride`` can thin only that background rendering
-    for very large meshes. Selected local tetrahedron indices are overlaid in
-    the supplied bright edge and darker vertex colors. Returns ``(ax, artists)``.
-    """
-    mesh = (
-        tetrahedral_field.mesh
-        if isinstance(tetrahedral_field, TetrahedralField)
-        else tetrahedral_field
-    )
-    if not isinstance(mesh, TetrahedralMesh):
-        raise TypeError("tetrahedral_field must be a TetrahedralField or mesh")
-    for name, index, size in (
-        ("beam_index", beam_index, mesh.nbeams),
-        ("sheet_index", sheet_index, mesh.nsheets),
-    ):
-        if isinstance(index, bool) or not isinstance(index, int):
-            raise TypeError(f"{name} must be an integer")
-        if not -size <= index < size:
-            raise IndexError(f"{name} {index} is outside a size of {size}")
-    beam_index %= mesh.nbeams
-    sheet_index %= mesh.nsheets
-    if isinstance(tetrahedron_stride, bool) or not isinstance(tetrahedron_stride, int):
-        raise TypeError("tetrahedron_stride must be an integer")
-    if tetrahedron_stride < 1:
-        raise ValueError("tetrahedron_stride must be positive")
-
-    positions = np.asarray(mesh.vertex_positions[beam_index, sheet_index])
-    connectivity = np.asarray(mesh.connectivity)
-    valid = np.asarray(mesh.valid[beam_index, sheet_index], dtype=bool)
-    valid_tetrahedra = connectivity[valid][::tetrahedron_stride]
-    if valid_tetrahedra.size == 0:
-        raise ValueError("the selected beam sheet has no valid tetrahedra")
-
-    mesh_vertex_indices = np.unique(valid_tetrahedra)
-    mesh_edges = valid_tetrahedra[:, _TETRAHEDRON_EDGES].reshape((-1, 2))
-    mesh_edges = np.unique(np.sort(mesh_edges, axis=-1), axis=0)
-    background_segments = positions[mesh_edges]
-
-    highlighted = tuple(highlighted_tetrahedra)
-    if len(highlight_edge_colors) < len(highlighted):
-        raise ValueError("not enough highlight edge colors were supplied")
-    if len(highlight_vertex_colors) < len(highlighted):
-        raise ValueError("not enough highlight vertex colors were supplied")
-    for tetrahedron_index in highlighted:
-        if isinstance(tetrahedron_index, bool) or not isinstance(
-            tetrahedron_index, int
-        ):
-            raise TypeError("highlighted tetrahedron indices must be integers")
-        if not -mesh.ntetrahedra <= tetrahedron_index < mesh.ntetrahedra:
-            raise IndexError(
-                f"tetrahedron index {tetrahedron_index} is outside the mesh"
-            )
-        if not valid[tetrahedron_index % mesh.ntetrahedra]:
-            raise ValueError(
-                f"highlighted tetrahedron {tetrahedron_index} is not valid"
-            )
-
-    if ax is None:
-        figure = plt.figure()
-        ax = figure.add_subplot(111, projection="3d")
-    if not hasattr(ax, "get_zlim"):
-        raise TypeError("ax must be a three-dimensional Matplotlib axis")
-
-    background_edges = Line3DCollection(
-        background_segments,
-        colors="grey",
-        linewidths=0.45,
-        alpha=0.22,
-    )
-    ax.add_collection3d(background_edges)
-    background_vertices = ax.scatter(
-        *positions[mesh_vertex_indices].T,
-        color="black",
-        s=5.0,
-        alpha=0.65,
-        depthshade=False,
-    )
-    highlight_artists = []
-    for color_index, tetrahedron_index in enumerate(highlighted):
-        tetrahedron_index %= mesh.ntetrahedra
-        vertex_indices = connectivity[tetrahedron_index]
-        vertices = positions[vertex_indices]
-        edge_segments = vertices[_TETRAHEDRON_EDGES]
-        edge_artist = Line3DCollection(
-            edge_segments,
-            colors=highlight_edge_colors[color_index],
-            linewidths=2.0,
-            alpha=0.95,
-        )
-        ax.add_collection3d(edge_artist)
-        vertex_artist = ax.scatter(
-            *vertices.T,
-            color=highlight_vertex_colors[color_index],
-            s=26.0,
-            depthshade=False,
-            zorder=3,
-        )
-        highlight_artists.append({"edges": edge_artist, "vertices": vertex_artist})
-
-    plotted_positions = positions[mesh_vertex_indices]
-    ax.auto_scale_xyz(
-        plotted_positions[:, 0], plotted_positions[:, 1], plotted_positions[:, 2]
-    )
-    coordinate_range = np.ptp(plotted_positions, axis=0)
-    positive_ranges = coordinate_range[coordinate_range > 0.0]
-    fallback_range = np.min(positive_ranges) if positive_ranges.size else 1.0
-    ax.set_box_aspect(
-        np.where(coordinate_range > 0.0, coordinate_range, fallback_range)
-    )
-    ax.set_xlabel("x [m]")
-    ax.set_ylabel("y [m]")
-    ax.set_zlabel("z [m]")
-    artists = {
-        "background_edges": background_edges,
-        "background_vertices": background_vertices,
-        "highlights": highlight_artists,
-    }
-    return ax, artists
-
-
 def plot_simplicial_mesh(
     simplicial_field: SimplicialField | SimplicialMesh,
     *,
@@ -501,5 +347,4 @@ __all__ = [
     "plot_hydro_slice",
     "plot_ray_trajectories",
     "plot_simplicial_mesh",
-    "plot_tetrahedral_mesh",
 ]

@@ -5,12 +5,12 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from pyGATH.fields import tetrahedralise_sheet_fields
+from pyGATH.fields import simplicialise_sheet_fields
 from pyGATH.grid import Grid, HydroFields
 from pyGATH.plotting import (
     plot_hydro_slice,
     plot_ray_trajectories,
-    plot_tetrahedral_mesh,
+    plot_simplicial_mesh,
 )
 from pyGATH.raytracing import RAY_SHEET_LAYOUT, RAY_STATE_LAYOUT, RayTraceResult
 
@@ -105,26 +105,26 @@ def test_ray_stride_applies_to_both_transverse_axes():
     plt.close(fig)
 
 
-def test_tetrahedral_mesh_plot_draws_background_and_highlight():
+def test_simplicial_mesh_plot_draws_background():
     fields = np.zeros((1, 1, 2, 2, 2, RAY_SHEET_LAYOUT.n_attributes))
     first, second, sample = np.meshgrid((0.0, 1.0), (0.0, 1.0), (0.0, 1.0))
     fields[0, 0, ..., RAY_STATE_LAYOUT.position] = np.stack(
         (first, second, sample), axis=-1
     )
-    tetrahedral_field = tetrahedralise_sheet_fields(fields, fields="ray_power")
+    simplicial_field = simplicialise_sheet_fields(
+        fields, dimension=3, fields="ray_power"
+    )
     figure = plt.figure()
     axis = figure.add_subplot(111, projection="3d")
 
-    _, artists = plot_tetrahedral_mesh(
-        tetrahedral_field,
-        tetrahedron_stride=2,
-        highlighted_tetrahedra=(0,),
+    _, artists = plot_simplicial_mesh(
+        simplicial_field,
+        simplex_stride=2,
         ax=axis,
     )
 
     assert artists["background_edges"] is not None
     assert artists["background_vertices"] is not None
-    assert len(artists["highlights"]) == 1
     assert axis.get_xlabel() == "x [m]"
     assert axis.get_zlabel() == "z [m]"
     plt.close(figure)
